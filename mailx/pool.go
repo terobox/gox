@@ -77,15 +77,20 @@ func newConnPool(cfg *Config) *connPool {
 
 // get 从池中获取连接，没有则新建
 func (p *connPool) get() (*smtpConn, error) {
+	p.mu.Lock()
+	if p.closed {
+		p.mu.Unlock()
+		return nil, fmt.Errorf("connection pool is closed")
+	}
+	p.mu.Unlock()
+
 	for {
 		select {
 		case sc := <-p.conns:
-			// 检查连接是否过期
 			if time.Since(sc.createdAt) > p.maxAge {
 				sc.client.Close()
 				continue
 			}
-			// 检查连接是否存活 (NOOP)
 			if err := sc.client.Noop(); err != nil {
 				sc.client.Close()
 				continue

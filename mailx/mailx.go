@@ -187,8 +187,8 @@ func (m *Mailer) Send(groups ...Group) *SendResult {
 					atomic.AddInt64(&successCount, 1)
 					m.log.Debugf("✓ %s", t.to)
 				}
-				// 只在成功时限速
-				if err == nil && m.cfg.RateLimit > 0 {
+				// 失败/成功都限速
+				if m.cfg.RateLimit > 0 {
 					time.Sleep(m.cfg.RateLimit)
 				}
 			}
