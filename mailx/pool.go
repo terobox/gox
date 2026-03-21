@@ -102,13 +102,15 @@ func (p *connPool) put(sc *smtpConn) {
 	if sc == nil {
 		return
 	}
+
 	p.mu.Lock()
-	if p.closed {
-		p.mu.Unlock()
+	closed := p.closed
+	p.mu.Unlock()
+
+	if closed {
 		sc.client.Close()
 		return
 	}
-	p.mu.Unlock()
 
 	select {
 	case p.conns <- sc:
@@ -121,10 +123,22 @@ func (p *connPool) put(sc *smtpConn) {
 // close 关闭池中所有连接
 func (p *connPool) close() {
 	p.mu.Lock()
+	if p.closed {
+		p.mu.Unlock()
+		return
+	}
 	p.closed = true
 	p.mu.Unlock()
-	close(p.conns)
-	for sc := range p.conns {
-		sc.client.Close()
+
+	// 不要 close(p.conns)，只把池里现有连接清掉
+	for {
+		select {
+		case sc := <-p.conns:
+			if sc != nil {
+				sc.client.Close()
+			}
+		default:
+			return
+		}
 	}
 }

@@ -81,10 +81,10 @@ func New(cfg Config) (*Mailer, error) {
 	// 验证连接可用
 	sc, err := m.pool.get()
 	if err != nil {
-		return nil, fmt.Errorf("gomailer: initial connection failed: %w", err)
+		return nil, fmt.Errorf("mailx: initial connection failed: %w", err)
 	}
 	m.pool.put(sc)
-	m.log.Infof("gomailer initialized | host=%s:%d pool=%d workers=%d", cfg.Host, cfg.Port, cfg.PoolSize, cfg.Workers)
+	m.log.Infof("mailx initialized | host=%s:%d pool=%d workers=%d", cfg.Host, cfg.Port, cfg.PoolSize, cfg.Workers)
 
 	return m, nil
 }
@@ -92,7 +92,7 @@ func New(cfg Config) (*Mailer, error) {
 // Close 关闭连接池
 func (m *Mailer) Close() {
 	m.pool.close()
-	m.log.Infof("gomailer closed")
+	m.log.Infof("mailx closed")
 }
 
 // Send 核心发送方法
@@ -187,8 +187,8 @@ func (m *Mailer) Send(groups ...Group) *SendResult {
 					atomic.AddInt64(&successCount, 1)
 					m.log.Debugf("✓ %s", t.to)
 				}
-				// 限速
-				if m.cfg.RateLimit > 0 {
+				// 只在成功时限速
+				if err == nil && m.cfg.RateLimit > 0 {
 					time.Sleep(m.cfg.RateLimit)
 				}
 			}
@@ -208,6 +208,15 @@ func (m *Mailer) Send(groups ...Group) *SendResult {
 
 	m.log.Infof("completed: %s", result)
 	return result
+}
+
+func (m *Mailer) discardConn(sc *smtpConn) {
+	if sc == nil {
+		return
+	}
+	if err := sc.client.Close(); err != nil {
+		m.log.Debugf("close broken smtp conn failed: %v", err)
+	}
 }
 
 // sendOne 发送单封邮件，带重试
@@ -230,8 +239,7 @@ func (m *Mailer) sendOne(t task) error {
 		err = m.doSend(sc, t.to, msg)
 		if err != nil {
 			lastErr = err
-			// 连接可能已损坏，不归还
-			sc.client.Close()
+			m.discardConn(sc)
 			continue
 		}
 
@@ -245,6 +253,11 @@ func (m *Mailer) sendOne(t task) error {
 
 // doSend 使用已有连接执行一次发送
 func (m *Mailer) doSend(sc *smtpConn, to string, msg []byte) error {
+	// 先重置，确保干净状态
+	if err := sc.client.Reset(); err != nil {
+		return fmt.Errorf("RSET: %w", err)
+	}
+
 	if err := sc.client.Mail(m.cfg.FromAddr); err != nil {
 		return fmt.Errorf("MAIL FROM: %w", err)
 	}

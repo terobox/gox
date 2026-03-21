@@ -2,13 +2,16 @@ package mailx
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"mime"
+	"mime/quotedprintable"
+	"net/mail"
 	"net/textproto"
 	"strings"
 	"time"
 
-	"math/rand"
+	"crypto/rand"
 )
 
 // Group 一组邮件：同一内容发送给多个收件人（每人独立）
@@ -56,11 +59,50 @@ func (r *SendResult) String() string {
 	return b.String()
 }
 
+func extractDomain(fromAddr string) string {
+	// 兼容 "Name <user@example.com>" 这种格式
+	if addr, err := mail.ParseAddress(fromAddr); err == nil && addr.Address != "" {
+		fromAddr = addr.Address
+	}
+
+	at := strings.LastIndex(fromAddr, "@")
+	if at == -1 || at == len(fromAddr)-1 {
+		return "localhost"
+	}
+
+	domain := strings.TrimSpace(fromAddr[at+1:])
+	if domain == "" {
+		return "localhost"
+	}
+
+	return domain
+}
+
+func buildMessageID(fromAddr string) string {
+	domain := extractDomain(fromAddr)
+	return fmt.Sprintf("<%d.%x@%s>", time.Now().UnixNano(), randomHex(8), domain)
+}
+
+func randomHex(n int) string {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		// 极少发生，兜底
+		return fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b)
+}
+
+func writeQuotedPrintable(buf *bytes.Buffer, s string) {
+	w := quotedprintable.NewWriter(buf)
+	_, _ = w.Write([]byte(s))
+	_ = w.Close()
+}
+
 // buildMessage 构建 MIME 邮件，兼容 text + html (multipart/alternative)
 func buildMessage(from, to, subject, text, html string) []byte {
 	var buf bytes.Buffer
 
-	boundary := fmt.Sprintf("=_gomailer_%x", rand.Int63())
+	boundary := fmt.Sprintf("=_mailx_%x", randomHex(16))
 
 	// Headers
 	headers := textproto.MIMEHeader{}
@@ -69,7 +111,8 @@ func buildMessage(from, to, subject, text, html string) []byte {
 	headers.Set("Subject", mime.QEncoding.Encode("UTF-8", subject))
 	headers.Set("Date", time.Now().Format(time.RFC1123Z))
 	headers.Set("MIME-Version", "1.0")
-	headers.Set("Message-ID", fmt.Sprintf("<%d.%x@gomailer>", time.Now().UnixNano(), rand.Int63()))
+	// headers.Set("Message-ID", fmt.Sprintf("<%d.%x@mailx>", time.Now().UnixNano(), rand.Int63()))
+	headers.Set("Message-ID", buildMessageID(from))
 
 	hasText := text != ""
 	hasHTML := html != ""
@@ -83,14 +126,16 @@ func buildMessage(from, to, subject, text, html string) []byte {
 		buf.WriteString("--" + boundary + "\r\n")
 		buf.WriteString("Content-Type: text/plain; charset=\"UTF-8\"\r\n")
 		buf.WriteString("Content-Transfer-Encoding: quoted-printable\r\n\r\n")
-		buf.WriteString(text)
+		// buf.WriteString(text)
+		writeQuotedPrintable(&buf, text)
 		buf.WriteString("\r\n")
 
 		// html part
 		buf.WriteString("--" + boundary + "\r\n")
 		buf.WriteString("Content-Type: text/html; charset=\"UTF-8\"\r\n")
 		buf.WriteString("Content-Transfer-Encoding: quoted-printable\r\n\r\n")
-		buf.WriteString(html)
+		// buf.WriteString(html)
+		writeQuotedPrintable(&buf, html)
 		buf.WriteString("\r\n")
 
 		buf.WriteString("--" + boundary + "--\r\n")
@@ -99,13 +144,15 @@ func buildMessage(from, to, subject, text, html string) []byte {
 		headers.Set("Content-Transfer-Encoding", "quoted-printable")
 		writeHeaders(&buf, headers)
 		buf.WriteString("\r\n")
-		buf.WriteString(html)
+		// buf.WriteString(html)
+		writeQuotedPrintable(&buf, html)
 	} else {
 		headers.Set("Content-Type", "text/plain; charset=\"UTF-8\"")
 		headers.Set("Content-Transfer-Encoding", "quoted-printable")
 		writeHeaders(&buf, headers)
 		buf.WriteString("\r\n")
-		buf.WriteString(text)
+		// buf.WriteString(text)
+		writeQuotedPrintable(&buf, text)
 	}
 
 	return buf.Bytes()
