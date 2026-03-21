@@ -25,8 +25,8 @@ func DefaultConfig() *Config {
 		MaxAge:        30,
 		MaxBackups:    10,
 		Compress:      true,
-		ConsoleOutput: true,
-		DisableFile:   false,
+		ConsoleOutput: true,  // 默认启用控制台输出
+		DisableFile:   false, // 默认启用文件输出
 	}
 }
 
