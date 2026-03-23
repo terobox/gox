@@ -5,8 +5,6 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-
-	"github.com/google/uuid"
 )
 
 // buildKey 生成 fullKey: "{bucket}/{prefix}/{folder}/{uuid}{ext}"
@@ -18,7 +16,7 @@ func (c *Client) buildKey(bucket, folder, filename, contentType string) string {
 			ext = exts[0]
 		}
 	}
-	s3Key := path.Join(c.pathPrefix, folder, uuid.New().String()+ext)
+	s3Key := path.Join(c.pathPrefix, folder, uuidNoDash()+ext)
 	return bucket + "/" + s3Key
 }
 
