@@ -84,7 +84,7 @@ func New(cfg Config) (*Mailer, error) {
 		return nil, fmt.Errorf("mailx: initial connection failed: %w", err)
 	}
 	m.pool.put(sc)
-	m.log.Infof("mailx initialized | host=%s:%d pool=%d workers=%d", cfg.Host, cfg.Port, cfg.PoolSize, cfg.Workers)
+	// m.log.Infof("mailx initialized | host=%s:%d pool=%d workers=%d", cfg.Host, cfg.Port, cfg.PoolSize, cfg.Workers)
 
 	return m, nil
 }
@@ -92,7 +92,7 @@ func New(cfg Config) (*Mailer, error) {
 // Close 关闭连接池
 func (m *Mailer) Close() {
 	m.pool.close()
-	m.log.Infof("mailx closed")
+	// m.log.Infof("mailx closed")
 }
 
 // Send 核心发送方法
