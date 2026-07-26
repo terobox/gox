@@ -13,6 +13,7 @@ type Config struct {
 	Compress      bool   `json:"compress" yaml:"compress" mapstructure:"compress"`
 	ConsoleOutput bool   `json:"console_output" yaml:"console_output" mapstructure:"console_output"`
 	DisableFile   bool   `json:"disable_file" yaml:"disable_file" mapstructure:"disable_file"`
+	CallerSkip    int    `json:"caller_skip" yaml:"caller_skip" mapstructure:"caller_skip"`
 }
 
 // DefaultConfig 返回一套合理的默认配置
@@ -27,6 +28,7 @@ func DefaultConfig() *Config {
 		Compress:      true,
 		ConsoleOutput: true,  // 默认启用控制台输出
 		DisableFile:   false, // 默认启用文件输出
+		CallerSkip:    1,     // 默认跳过 1 层调用栈（即日志调用者）
 	}
 }
 
@@ -49,5 +51,8 @@ func (c *Config) applyDefaults() {
 	}
 	if c.MaxBackups <= 0 {
 		c.MaxBackups = def.MaxBackups
+	}
+	if c.CallerSkip <= 0 {
+		c.CallerSkip = def.CallerSkip
 	}
 }

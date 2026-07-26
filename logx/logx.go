@@ -100,7 +100,7 @@ func New(cfg *Config) (*Logger, error) {
 	zapLogger := zap.New(
 		zapcore.NewTee(cores...),
 		zap.AddCaller(),
-		zap.AddCallerSkip(1), // 跳过本层封装，caller 指向实际调用处
+		zap.AddCallerSkip(cfg.CallerSkip), // 自定义 caller 指向实际调用处
 	)
 
 	return &Logger{

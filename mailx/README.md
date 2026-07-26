@@ -367,3 +367,84 @@ m.Send(mailx.Group{To: []string{"a@b.com"}, Subject: "hi", HTML: "<p>hello</p>"}
 mailer.SendHTML([]string{"a@b.com"}, "hi", "<p>hello</p>")
 
 ```
+
+**注入方式**
+
+```go
+package mailer
+
+import (
+	"fmt"
+
+	"github.com/terobox/gox/mailx"
+	"github.com/terobox/subaway/backend/config"
+	"github.com/terobox/subaway/backend/infra/logger"
+)
+
+// Mailer 对 mailx.Mailer 的薄封装
+type Mailer struct {
+	client *mailx.Mailer
+}
+
+// New 创建实例（替代原来的 Init）
+func New(cfg *config.Config) (*Mailer, error) {
+	m, err := mailx.New(mailx.Config{
+		Host:     cfg.SMTPHost,
+		Port:     cfg.SMTPPort,
+		Username: cfg.SMTPUser,
+		Password: cfg.SMTPPass,
+		FromName: cfg.SMTPFromName,
+		SSL:      cfg.SMTPSSL,
+		PoolSize: 5,
+		Workers:  3,
+		Logger: &mailx.FuncLogger{
+			DebugFunc: logger.Debugf,
+			InfoFunc:  logger.Infof,
+			WarnFunc:  logger.Warnf,
+			ErrorFunc: logger.Errorf,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("mailer init: %w", err)
+	}
+	return &Mailer{client: m}, nil
+}
+func (m *Mailer) Close() {
+	if m != nil && m.client != nil {
+		m.client.Close()
+	}
+}
+
+// ──── 对外 API（方法而非包函数）────
+func (m *Mailer) SendText(to []string, subject, body string) *mailx.SendResult {
+	return m.client.Send(mailx.Group{
+		To: to, Subject: subject, Text: body,
+	})
+}
+func (m *Mailer) SendHTML(to []string, subject, html string) *mailx.SendResult {
+	return m.client.Send(mailx.Group{
+		To: to, Subject: subject, HTML: html,
+	})
+}
+func (m *Mailer) SendMixed(to []string, subject, text, html string) *mailx.SendResult {
+	return m.client.Send(mailx.Group{
+		To: to, Subject: subject, Text: text, HTML: html,
+	})
+}
+func (m *Mailer) SendGroups(groups ...mailx.Group) *mailx.SendResult {
+	return m.client.Send(groups...)
+}
+
+```
+
+main.go
+
+```go
+// init mailer
+ml, err := mailer.New(cfg)
+if err != nil {
+	logger.Fatalf("init mailer failed: %v", err)
+}
+defer ml.Close()
+logger.Info("Mailer initialized.")
+```
